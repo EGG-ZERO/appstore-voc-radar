@@ -1,0 +1,40 @@
+name: daily-update
+
+on:
+  schedule:
+    - cron: "50 22 * * *"   # UTC 22:50 = 北京时间06:50，与da-job-radar错峰
+  workflow_dispatch: {}      # 手动触发入口，部署后先手动跑一次验证
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: pip install openpyxl
+
+      - name: Unit tests
+        run: python tests/test_analyze.py
+
+      - name: Run pipeline
+        run: |
+          python src/fetch_reviews.py
+          python src/analyze.py
+          python src/export_excel.py
+          python src/build_site.py
+
+      - name: Commit and push
+        run: |
+          git config user.name "voc-radar-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data docs reports
+          git commit -m "chore: daily update $(date -u +%F)" || echo "no changes"
+          git push
